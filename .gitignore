@@ -1,0 +1,7 @@
+node_modules/
+out/
+dist/
+vendor/
+models/
+.DS_Store
+*.log
