@@ -1,0 +1,23 @@
+# Packaging is not the documented way to run this app (see README) — `npm run dev` is.
+# This config exists so an unsigned local `npm run build:mac` works and so the microphone
+# usage description and entitlement are recorded somewhere real.
+appId: com.crossoover.voice-notes-ai
+productName: Voice Notes
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,README.md,spec.md,build-task.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+mac:
+  # Unsigned on purpose: no cert is assumed on the reviewer's machine.
+  identity: null
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: Voice Notes listens while you hold the talk button so it can transcribe what you say.
+  notarize: false
+npmRebuild: false
