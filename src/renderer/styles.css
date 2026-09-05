@@ -4,6 +4,8 @@
   --line: #e2e1de;
   --text: #1c1b1a;
   --muted: #78756f;
+  --accent: #c0392b;
+  --warn: #b45309;
   color-scheme: light;
 }
 
@@ -45,4 +47,110 @@ body {
   padding: 16px;
   /* The transcript is the app's output — it has to be selectable and copyable. */
   user-select: text;
+}
+
+.banner {
+  flex: none;
+  padding: 10px 16px;
+  background: #fdf3f2;
+  border-bottom: 1px solid #f0d5d1;
+  color: #8a2f22;
+}
+
+.empty,
+.debug {
+  color: var(--muted);
+  margin: 0;
+}
+
+.controls {
+  flex: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.meter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 8px;
+}
+
+.meter {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 60ms linear;
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  min-width: 34px;
+  text-align: right;
+}
+
+.timer-warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.ptt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ptt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ptt-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.ptt-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.ptt-on .ptt-dot {
+  background: #fff;
+}
+
+.toast {
+  position: absolute;
+  bottom: 100%;
+  margin-bottom: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
 }
