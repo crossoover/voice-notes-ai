@@ -16,5 +16,6 @@ export type TurnEvent =
 
 export type VoiceNotesApi = {
   submitUtterance(pcm: ArrayBuffer, sampleRate: number): Promise<{ turnId: string }>
+  newConversation(): Promise<void>
   onTurnEvent(handler: (event: TurnEvent) => void): () => void
 }

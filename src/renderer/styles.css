@@ -35,7 +35,10 @@ body {
 
 .header {
   flex: none;
-  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 8px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
   font-weight: 600;
@@ -196,4 +199,28 @@ body {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
+}
+
+.ghost {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.ghost:hover {
+  color: var(--text);
+}
+
+.entry-tool {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.entry-tool .said::before {
+  content: '⚙ ';
 }

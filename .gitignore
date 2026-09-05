@@ -6,3 +6,7 @@ models/
 .DS_Store
 .eslintcache
 *.log
+
+# The notes folder is committed, but whatever the agent writes in it is not.
+notes/*
+!notes/README.md

@@ -3,6 +3,7 @@ import { app } from 'electron'
 import { unlink, writeFile } from 'fs/promises'
 import { join } from 'path'
 import type { TurnEvent } from '../shared/types'
+import { ask } from './agent'
 import { encodeWav } from './wav'
 import { isBlank, transcribe } from './whisper'
 
@@ -32,6 +33,13 @@ async function run(
       return
     }
     send({ turnId, type: 'transcript', text: transcript })
+
+    send({ turnId, type: 'thinking' })
+    const reply = await ask(transcript, {
+      tool: (label) => send({ turnId, type: 'tool', label }),
+      delta: (text) => send({ turnId, type: 'delta', text })
+    }).reply
+    send({ turnId, type: 'done', text: reply })
   } catch (err) {
     send({
       turnId,

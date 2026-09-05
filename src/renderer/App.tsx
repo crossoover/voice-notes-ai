@@ -38,14 +38,40 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), [])
 
-  const addEntry = useCallback((entry: Omit<Entry, 'id'>): void => {
-    setStatus(null)
-    setEntries((prev) => [...prev, { ...entry, id: crypto.randomUUID() }])
+  // The id of the reply being streamed into, so deltas append to it instead of
+  // stacking up new entries. Cleared when a turn starts thinking.
+  const replyId = useRef<string | null>(null)
+
+  const addEntry = useCallback((entry: Omit<Entry, 'id'>): string => {
+    const id = crypto.randomUUID()
+    setEntries((prev) => [...prev, { ...entry, id }])
+    return id
+  }, [])
+
+  const appendReply = useCallback(
+    (turnId: string, text: string): void => {
+      const id = replyId.current
+      if (id === null) replyId.current = addEntry({ kind: 'ai', turnId, text })
+      else setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, text: e.text + text } : e)))
+    },
+    [addEntry]
+  )
+
+  // `done` is authoritative (spec §4.5), so it replaces every reply bubble this turn
+  // streamed — however many tool calls split them up — with one final bubble at the
+  // bottom. Replacing only the last bubble would leave earlier partial text above it.
+  const settleReply = useCallback((turnId: string, text: string): void => {
+    setEntries((prev) => [
+      ...prev.filter((e) => !(e.kind === 'ai' && e.turnId === turnId)),
+      { id: crypto.randomUUID(), turnId, kind: 'ai', text }
+    ])
+    replyId.current = null
   }, [])
 
   const { recording, level, elapsedMs, micError, start, stop } = useRecorder({
     onUtterance: (pcm, sampleRate) => {
       window.api.submitUtterance(pcm.buffer, sampleRate).catch((err: unknown) => {
+        setStatus(null)
         addEntry({
           kind: 'error',
           text: "Couldn't start that turn.",
@@ -86,21 +112,59 @@ export default function App(): React.JSX.Element {
           case 'transcript':
             addEntry({ kind: 'you', text: event.text })
             break
+          case 'thinking':
+            replyId.current = null
+            setStatus('Thinking…')
+            break
+          case 'tool':
+            // Text after a tool call belongs in a new bubble below the tool line,
+            // not appended to the one that was already streaming above it.
+            replyId.current = null
+            addEntry({ kind: 'tool', text: event.label })
+            break
+          case 'delta':
+            appendReply(event.turnId, event.text)
+            break
+          case 'done':
+            settleReply(event.turnId, event.text.trim() === '' ? '(no reply)' : event.text)
+            setStatus(null)
+            break
           case 'rejected':
             setStatus(null)
             showToast(REJECTION_TEXT[event.reason])
             break
           case 'error':
+            setStatus(null)
             addEntry({ kind: 'error', text: event.message, detail: event.detail })
             break
         }
       }),
-    [addEntry, showToast]
+    [addEntry, appendReply, settleReply, showToast]
   )
 
   return (
     <div className="app">
-      <header className="header">Voice Notes</header>
+      <header className="header">
+        <span>Voice Notes</span>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => {
+            window.api.newConversation().catch((err: unknown) => {
+              addEntry({
+                kind: 'error',
+                text: "Couldn't start a new conversation.",
+                detail: err instanceof Error ? err.message : String(err)
+              })
+            })
+            replyId.current = null
+            setEntries([])
+            setStatus(null)
+          }}
+        >
+          ＋ New
+        </button>
+      </header>
 
       {micError && <div className="banner">{micError}</div>}
 

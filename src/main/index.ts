@@ -1,7 +1,10 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
+import { mkdirSync } from 'fs'
 import { join } from 'path'
 import { optimizer, is } from '@electron-toolkit/utils'
 import type { TurnEvent } from '../shared/types'
+import { newConversation } from './agent'
+import { NOTES_DIR } from './paths'
 import { startTurn } from './turn'
 
 function createWindow(): void {
@@ -33,6 +36,11 @@ function createWindow(): void {
 app.whenReady().then(() => {
   // F12 toggles devtools in dev, Cmd+R is ignored in production.
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
+
+  // The agent's whole world; it must exist before the first turn runs in it.
+  mkdirSync(NOTES_DIR, { recursive: true })
+
+  ipcMain.handle('conversation:new', () => newConversation())
 
   ipcMain.handle('turn:submit', (e, pcm: ArrayBuffer, sampleRate: number) => {
     const send = (event: TurnEvent): void => {

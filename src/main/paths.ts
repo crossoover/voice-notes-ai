@@ -6,5 +6,6 @@ import { dirname, join } from 'path'
 // never disagree about where these live.
 const ROOT = app.isPackaged ? join(dirname(app.getPath('exe')), '..') : join(__dirname, '../..')
 
+export const NOTES_DIR = join(ROOT, 'notes')
 export const WHISPER_BIN = join(ROOT, 'vendor/whisper.cpp/build/bin/whisper-cli')
 export const WHISPER_MODEL = join(ROOT, 'models/ggml-base.en.bin')
