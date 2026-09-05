@@ -2,10 +2,11 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
 import { optimizer, is } from '@electron-toolkit/utils'
-import type { TurnEvent } from '../shared/types'
-import { newConversation } from './agent'
+import type { Preflight, TurnEvent } from '../shared/types'
+import { checkAgent, newConversation } from './agent'
 import { NOTES_DIR } from './paths'
-import { startTurn } from './turn'
+import { cancelTurn, shutdown, startTurn } from './turn'
+import { checkSpeech } from './whisper'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -40,7 +41,18 @@ app.whenReady().then(() => {
   // The agent's whole world; it must exist before the first turn runs in it.
   mkdirSync(NOTES_DIR, { recursive: true })
 
-  ipcMain.handle('conversation:new', () => newConversation())
+  ipcMain.handle('turn:cancel', () => cancelTurn())
+
+  ipcMain.handle('conversation:new', () => {
+    // Cancel first, or the turn still running would repopulate the cleared window.
+    cancelTurn({ notify: false })
+    newConversation()
+  })
+
+  ipcMain.handle('preflight', async (): Promise<Preflight> => ({
+    agent: await checkAgent(),
+    speech: await checkSpeech()
+  }))
 
   ipcMain.handle('turn:submit', (e, pcm: ArrayBuffer, sampleRate: number) => {
     const send = (event: TurnEvent): void => {
@@ -52,4 +64,5 @@ app.whenReady().then(() => {
   createWindow()
 })
 
+app.on('before-quit', shutdown)
 app.on('window-all-closed', () => app.quit())

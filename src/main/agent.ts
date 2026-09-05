@@ -1,6 +1,9 @@
-import { spawn, type ChildProcess } from 'child_process'
+import { execFile, spawn } from 'child_process'
 import { basename } from 'path'
+import { endProcess } from './kill'
 import { NOTES_DIR } from './paths'
+
+const TIMEOUT_MS = 60_000
 
 const SYSTEM_PROMPT = [
   'You are a voice notes assistant. You work only inside this notes folder, which holds',
@@ -32,6 +35,16 @@ export function newConversation(): void {
   sessionId = null
 }
 
+/** Is the CLI installed and runnable at all? Checked once at startup (spec §7.3). */
+export function checkAgent(): Promise<{ ok: boolean; version?: string; error?: string }> {
+  return new Promise((resolve) => {
+    execFile('claude', ['--version'], { timeout: 10_000 }, (err, stdout) => {
+      if (err) resolve({ ok: false, error: err.message })
+      else resolve({ ok: true, version: stdout.trim() })
+    })
+  })
+}
+
 function toolLabel(name: unknown, input: unknown): string {
   const verb = typeof name === 'string' ? (TOOL_VERB[name] ?? `Using ${name}`) : 'Working'
   const path =
@@ -46,7 +59,7 @@ function lastLines(text: string, count: number): string {
   return lines.slice(-count).join('\n')
 }
 
-export type AgentRun = { child: ChildProcess; reply: Promise<string> }
+export type AgentRun = { kill: () => void; reply: Promise<string> }
 
 export function ask(
   prompt: string,
@@ -70,19 +83,35 @@ export function ask(
     // on it forever and never emits a single line.
     { cwd: NOTES_DIR, stdio: ['ignore', 'pipe', 'pipe'] }
   )
+  const resumed = sessionId !== null
+  // Whether we ended this run, tracked rather than inferred: the CLI handles SIGTERM
+  // and exits 143, so a killed run looks like an ordinary non-zero exit from here.
+  let killed = false
+  const kill = (): void => {
+    killed = true
+    endProcess(child)
+  }
 
   const reply = new Promise<string>((resolve, reject) => {
     let buffered = ''
     let stderr = ''
     let result: string | null = null
-    const fail = (message: string, detail: string): void => {
+    // Held locally until the run finishes. A killed run never persists its session,
+    // so adopting its id would make every later turn fail to resume.
+    let runSessionId: string | null = null
+    const fail = (message: string, detail?: string): void => {
       reject(new Error(message, { cause: detail }))
     }
+
+    const timer = setTimeout(() => {
+      kill()
+      fail(`The agent didn't respond within ${TIMEOUT_MS / 1000}s.`, lastLines(stderr, 3))
+    }, TIMEOUT_MS)
 
     const handle = (event: Record<string, unknown>): void => {
       // The CLI's exact shapes vary by version, so read defensively and ignore
       // anything that doesn't look like what we expect.
-      if (typeof event.session_id === 'string') sessionId = event.session_id
+      if (typeof event.session_id === 'string') runSessionId = event.session_id
 
       if (event.type === 'assistant') {
         const message = event.message as { content?: unknown } | undefined
@@ -123,13 +152,34 @@ export function ask(
     })
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk))
 
-    child.on('error', (err) => fail('Could not run the Claude CLI.', err.message))
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      fail('Could not run the Claude CLI.', err.message)
+    })
     child.on('close', (code, signal) => {
-      if (result !== null) resolve(result)
-      else if (code === 0) fail('The agent finished without replying.', lastLines(stderr, 3))
-      else fail('The agent failed.', lastLines(stderr, 3) || `claude exited with ${signal ?? code}`)
+      clearTimeout(timer)
+      if (result !== null) {
+        if (runSessionId !== null) sessionId = runSessionId
+        resolve(result)
+        return
+      }
+
+      // A resume that never even reached `init` means the session is gone, and
+      // keeping its id would fail every later turn the same way. A run we killed
+      // proves nothing about the session, and one that got as far as `init` failed
+      // for some other reason — neither should lose the conversation.
+      if (resumed && runSessionId === null && !killed) sessionId = null
+
+      // Auth and rate-limit failures say the useful thing on stderr, and §7.3 wants
+      // that verbatim rather than one disclosure click away behind a generic line.
+      const tail = lastLines(stderr, 3)
+      const lines = tail.split('\n')
+      const headline = lines[lines.length - 1]
+      if (code === 0) fail('The agent finished without replying.', tail)
+      else if (headline) fail(headline, lines.length > 1 ? tail : undefined)
+      else fail('The agent failed.', `claude exited with ${signal ?? code}`)
     })
   })
 
-  return { child, reply }
+  return { kill, reply }
 }

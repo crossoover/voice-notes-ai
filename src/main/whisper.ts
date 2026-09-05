@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from 'child_process'
+import { execFile, spawn, type ChildProcess } from 'child_process'
+import { existsSync } from 'fs'
 import { cpus } from 'os'
 import { WHISPER_BIN, WHISPER_MODEL } from './paths'
 
@@ -16,6 +17,21 @@ const HALLUCINATIONS = new Set([
   'music',
   'blank'
 ])
+
+/**
+ * Did `npm run setup` actually run? Checked once at startup (spec §7.6). The binary
+ * is run rather than stat'd: whisper-cli hardcodes an absolute rpath to its build
+ * directory, so a moved checkout leaves a file that exists but cannot load its
+ * dylibs — and a banner saying everything is fine would be a lie.
+ */
+export function checkSpeech(): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    if (!existsSync(WHISPER_MODEL)) return resolve({ ok: false, error: `missing ${WHISPER_MODEL}` })
+    execFile(WHISPER_BIN, ['--help'], { timeout: 10_000 }, (err) =>
+      resolve(err ? { ok: false, error: err.message } : { ok: true })
+    )
+  })
+}
 
 function normalize(text: string): string {
   return text

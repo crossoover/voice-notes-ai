@@ -6,6 +6,14 @@ import type { RejectionReason } from '../shared/types'
 
 const WARN_AT_MS = 50_000
 
+// Cancellation is not atomic and the UI has to say so: files the agent already
+// wrote stay written (spec §7.2).
+const INTERRUPTED = 'Interrupted — the assistant may have already changed files.'
+
+const NO_AGENT =
+  'Claude CLI not found. Install with `npm i -g @anthropic-ai/claude-code` and run `claude` once to sign in.'
+const NO_SPEECH = 'Speech model not installed — run `npm run setup`.'
+
 // One home for rejection wording, wherever the rejection came from.
 const REJECTION_TEXT: Record<RejectionReason, string> = {
   'too-short': 'Too short — hold and speak.',
@@ -28,7 +36,17 @@ export default function App(): React.JSX.Element {
   const [entries, setEntries] = useState<Entry[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [banners, setBanners] = useState<string[]>([])
   const toastTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    window.api
+      .preflight()
+      .then(({ agent, speech }) =>
+        setBanners([...(speech.ok ? [] : [NO_SPEECH]), ...(agent.ok ? [] : [NO_AGENT])])
+      )
+      .catch(() => setBanners([NO_AGENT]))
+  }, [])
 
   const showToast = useCallback((text: string): void => {
     setToast(text)
@@ -83,11 +101,20 @@ export default function App(): React.JSX.Element {
     onNotice: showToast
   })
 
+  // Pushing to talk barges in on whatever is running (spec §7.2). The cancel is not
+  // awaited: main kills the children before it returns, and opening the mic takes
+  // orders of magnitude longer than the round trip, so waiting would only make
+  // recording hostage to an IPC call.
+  const beginTalking = useCallback((): void => {
+    void window.api.cancelTurn()
+    start()
+  }, [start])
+
   useEffect(() => {
     const down = (e: KeyboardEvent): void => {
       if (e.code !== 'Space' || e.repeat || isTypingTarget(e.target)) return
       e.preventDefault()
-      start()
+      beginTalking()
     }
     const up = (e: KeyboardEvent): void => {
       if (e.code !== 'Space' || isTypingTarget(e.target)) return
@@ -100,7 +127,7 @@ export default function App(): React.JSX.Element {
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
     }
-  }, [start, stop])
+  }, [beginTalking, stop])
 
   useEffect(
     () =>
@@ -127,6 +154,15 @@ export default function App(): React.JSX.Element {
             break
           case 'done':
             settleReply(event.turnId, event.text.trim() === '' ? '(no reply)' : event.text)
+            setStatus(null)
+            break
+          case 'cancelled':
+            // Keep the label, drop the half-sentence (spec §7.2).
+            setEntries((prev) => [
+              ...prev.filter((e) => !(e.kind === 'ai' && e.turnId === event.turnId)),
+              { id: crypto.randomUUID(), kind: 'note', text: INTERRUPTED }
+            ])
+            replyId.current = null
             setStatus(null)
             break
           case 'rejected':
@@ -166,7 +202,11 @@ export default function App(): React.JSX.Element {
         </button>
       </header>
 
-      {micError && <div className="banner">{micError}</div>}
+      {[...(micError ? [micError] : []), ...banners].map((text) => (
+        <div className="banner" key={text}>
+          {text}
+        </div>
+      ))}
 
       <Transcript entries={entries} />
 
@@ -182,11 +222,20 @@ export default function App(): React.JSX.Element {
         <PttButton
           recording={recording}
           disabled={micError !== null}
-          onStart={start}
+          onStart={beginTalking}
           onStop={stop}
         />
         <p className="status">
           {status ?? (recording ? 'Listening…' : 'Hold Space or the button to talk.')}
+          {status !== null && (
+            <button
+              type="button"
+              className="ghost stop"
+              onClick={() => void window.api.cancelTurn()}
+            >
+              Stop
+            </button>
+          )}
         </p>
         {toast && <div className="toast">{toast}</div>}
       </footer>

@@ -224,3 +224,21 @@ body {
 .entry-tool .said::before {
   content: '⚙ ';
 }
+
+.entry-note .said {
+  color: var(--warn);
+  background: #fdf6ec;
+  border: 1px solid #f0e0c6;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stop {
+  padding: 2px 8px;
+}

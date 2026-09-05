@@ -5,7 +5,7 @@ export type Entry = {
   id: string
   // Set on streamed reply bubbles so `done` can replace a turn's whole reply.
   turnId?: string
-  kind: 'you' | 'ai' | 'tool' | 'error'
+  kind: 'you' | 'ai' | 'tool' | 'note' | 'error'
   text: string
   detail?: string
 }
@@ -14,6 +14,7 @@ const WHO: Record<Entry['kind'], string> = {
   you: 'You',
   ai: 'AI',
   tool: '',
+  note: '',
   error: 'Error'
 }
 

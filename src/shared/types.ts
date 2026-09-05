@@ -14,8 +14,17 @@ export type TurnEvent =
   | { turnId: string; type: 'error'; message: string; detail?: string }
   | { turnId: string; type: 'cancelled' }
 
+// What main could verify at startup. The renderer owns the wording, as with
+// rejection reasons — main only reports whether each piece is usable.
+export type Preflight = {
+  agent: { ok: boolean; version?: string; error?: string }
+  speech: { ok: boolean; error?: string }
+}
+
 export type VoiceNotesApi = {
   submitUtterance(pcm: ArrayBuffer, sampleRate: number): Promise<{ turnId: string }>
+  cancelTurn(): Promise<void>
   newConversation(): Promise<void>
+  preflight(): Promise<Preflight>
   onTurnEvent(handler: (event: TurnEvent) => void): () => void
 }
