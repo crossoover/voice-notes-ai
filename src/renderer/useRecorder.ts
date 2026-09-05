@@ -2,17 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import workletUrl from './capture-worklet.js?url'
 import type { RejectionReason } from '../shared/types'
 
-// Tuned on real hardware; see spec §4.3.
-const MIN_DURATION_MS = 350
+// Tuned on real hardware; see spec §4.3. The spec's 350ms sits below what
+// base.en can actually use — measured against truncated speech, 0.4s returns
+// [BLANK_AUDIO] and 0.6s returns one word — so anything under ~500ms would clear
+// this gate only to come back as "didn't catch that" after a pointless subprocess.
+const MIN_DURATION_MS = 500
 const MIN_PEAK_RMS = 0.01
 const MAX_DURATION_MS = 60_000
 const TARGET_SAMPLE_RATE = 16000
 const TICK_MS = 60
 
 const MIC_READY = 'Microphone ready — hold again to talk.'
-
-// Temporary: how long the mic took to open, so the first-syllable cost is measurable.
-export type OpenTiming = { gumMs: number; workletMs: number }
 
 type Recording = {
   ctx: AudioContext
@@ -83,7 +83,6 @@ export function useRecorder(handlers: {
   level: number
   elapsedMs: number
   micError: string | null
-  openTiming: OpenTiming | null
   start: () => void
   stop: () => void
 } {
@@ -91,7 +90,6 @@ export function useRecorder(handlers: {
   const [level, setLevel] = useState(0)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [micError, setMicError] = useState<string | null>(null)
-  const [openTiming, setOpenTiming] = useState<OpenTiming | null>(null)
 
   const rec = useRef<Recording | null>(null)
   const opening = useRef(false)
@@ -145,14 +143,11 @@ export function useRecorder(handlers: {
       let stream: MediaStream | undefined
       let ctx: AudioContext | undefined
       try {
-        const t0 = performance.now()
         stream = await navigator.mediaDevices.getUserMedia({
           audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
         })
-        const t1 = performance.now()
         ctx = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE })
         await ctx.audioWorklet.addModule(workletUrl)
-        setOpenTiming({ gumMs: t1 - t0, workletMs: performance.now() - t1 })
 
         // Either the key came back up before the device opened, or the window lost
         // focus while it did — most often the first-run permission dialog. Neither
@@ -230,5 +225,5 @@ export function useRecorder(handlers: {
     return () => window.removeEventListener('blur', onBlur)
   }, [stop])
 
-  return { recording, level, elapsedMs, micError, openTiming, start, stop }
+  return { recording, level, elapsedMs, micError, start, stop }
 }

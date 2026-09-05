@@ -1,6 +1,8 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { optimizer, is } from '@electron-toolkit/utils'
+import type { TurnEvent } from '../shared/types'
+import { startTurn } from './turn'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -31,6 +33,14 @@ function createWindow(): void {
 app.whenReady().then(() => {
   // F12 toggles devtools in dev, Cmd+R is ignored in production.
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
+
+  ipcMain.handle('turn:submit', (e, pcm: ArrayBuffer, sampleRate: number) => {
+    const send = (event: TurnEvent): void => {
+      if (!e.sender.isDestroyed()) e.sender.send('turn:event', event)
+    }
+    return { turnId: startTurn(send, pcm, sampleRate) }
+  })
+
   createWindow()
 })
 

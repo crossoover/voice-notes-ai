@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import PttButton from './components/PttButton'
+import Transcript, { type Entry } from './components/Transcript'
 import { useRecorder } from './useRecorder'
 import type { RejectionReason } from '../shared/types'
 
@@ -24,12 +25,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export default function App(): React.JSX.Element {
+  const [entries, setEntries] = useState<Entry[]>([])
+  const [status, setStatus] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  // Temporary: lets me confirm the captured audio is real before whisper exists.
-  const [captured, setCaptured] = useState<{
-    pcm: Float32Array<ArrayBuffer>
-    sampleRate: number
-  } | null>(null)
   const toastTimer = useRef<number | undefined>(undefined)
 
   const showToast = useCallback((text: string): void => {
@@ -40,8 +38,21 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), [])
 
-  const { recording, level, elapsedMs, micError, openTiming, start, stop } = useRecorder({
-    onUtterance: (pcm, sampleRate) => setCaptured({ pcm, sampleRate }),
+  const addEntry = useCallback((entry: Omit<Entry, 'id'>): void => {
+    setStatus(null)
+    setEntries((prev) => [...prev, { ...entry, id: crypto.randomUUID() }])
+  }, [])
+
+  const { recording, level, elapsedMs, micError, start, stop } = useRecorder({
+    onUtterance: (pcm, sampleRate) => {
+      window.api.submitUtterance(pcm.buffer, sampleRate).catch((err: unknown) => {
+        addEntry({
+          kind: 'error',
+          text: "Couldn't start that turn.",
+          detail: err instanceof Error ? err.message : String(err)
+        })
+      })
+    },
     onRejected: (reason) => showToast(REJECTION_TEXT[reason]),
     onNotice: showToast
   })
@@ -65,18 +76,27 @@ export default function App(): React.JSX.Element {
     }
   }, [start, stop])
 
-  // Temporary debug affordance, removed once whisper is wired up.
-  const playBack = (): void => {
-    if (!captured) return
-    const ctx = new AudioContext()
-    const buffer = ctx.createBuffer(1, captured.pcm.length, captured.sampleRate)
-    buffer.copyToChannel(captured.pcm, 0)
-    const source = ctx.createBufferSource()
-    source.buffer = buffer
-    source.connect(ctx.destination)
-    source.onended = () => void ctx.close()
-    source.start()
-  }
+  useEffect(
+    () =>
+      window.api.onTurnEvent((event) => {
+        switch (event.type) {
+          case 'transcribing':
+            setStatus('Transcribing…')
+            break
+          case 'transcript':
+            addEntry({ kind: 'you', text: event.text })
+            break
+          case 'rejected':
+            setStatus(null)
+            showToast(REJECTION_TEXT[event.reason])
+            break
+          case 'error':
+            addEntry({ kind: 'error', text: event.message, detail: event.detail })
+            break
+        }
+      }),
+    [addEntry, showToast]
+  )
 
   return (
     <div className="app">
@@ -84,26 +104,7 @@ export default function App(): React.JSX.Element {
 
       {micError && <div className="banner">{micError}</div>}
 
-      <main className="transcript">
-        {captured ? (
-          <p className="debug">
-            Captured {(captured.pcm.length / captured.sampleRate).toFixed(2)}s —{' '}
-            {captured.pcm.length} samples @ {captured.sampleRate}Hz{' '}
-            <button type="button" onClick={playBack}>
-              Play back
-            </button>
-            {openTiming && (
-              <>
-                <br />
-                Mic opened in {Math.round(openTiming.gumMs + openTiming.workletMs)}ms (device{' '}
-                {Math.round(openTiming.gumMs)}ms, worklet {Math.round(openTiming.workletMs)}ms)
-              </>
-            )}
-          </p>
-        ) : (
-          <p className="empty">Hold Space or the button to talk.</p>
-        )}
-      </main>
+      <Transcript entries={entries} />
 
       <footer className="controls">
         <div className="meter-row">
@@ -120,6 +121,9 @@ export default function App(): React.JSX.Element {
           onStart={start}
           onStop={stop}
         />
+        <p className="status">
+          {status ?? (recording ? 'Listening…' : 'Hold Space or the button to talk.')}
+        </p>
         {toast && <div className="toast">{toast}</div>}
       </footer>
     </div>

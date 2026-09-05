@@ -154,3 +154,46 @@ body {
   background: var(--text);
   color: var(--bg);
 }
+
+.entry {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.who {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: 2px;
+}
+
+.entry-error .said {
+  color: #8a2f22;
+  background: #fdf3f2;
+  border: 1px solid #f0d5d1;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.detail summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.detail pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
