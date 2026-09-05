@@ -11,6 +11,7 @@ export type TurnEvent =
   | { turnId: string; type: 'tool'; label: string }
   | { turnId: string; type: 'delta'; text: string }
   | { turnId: string; type: 'done'; text: string }
+  | { turnId: string; type: 'speaking'; on: boolean }
   | { turnId: string; type: 'error'; message: string; detail?: string }
   | { turnId: string; type: 'cancelled' }
 
@@ -25,6 +26,7 @@ export type VoiceNotesApi = {
   submitUtterance(pcm: ArrayBuffer, sampleRate: number): Promise<{ turnId: string }>
   cancelTurn(): Promise<void>
   newConversation(): Promise<void>
+  setMuted(muted: boolean): Promise<void>
   preflight(): Promise<Preflight>
   onTurnEvent(handler: (event: TurnEvent) => void): () => void
 }

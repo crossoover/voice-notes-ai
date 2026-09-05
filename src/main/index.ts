@@ -5,6 +5,7 @@ import { optimizer, is } from '@electron-toolkit/utils'
 import type { Preflight, TurnEvent } from '../shared/types'
 import { checkAgent, newConversation } from './agent'
 import { NOTES_DIR } from './paths'
+import { setMuted } from './tts'
 import { cancelTurn, shutdown, startTurn } from './turn'
 import { checkSpeech } from './whisper'
 
@@ -42,6 +43,8 @@ app.whenReady().then(() => {
   mkdirSync(NOTES_DIR, { recursive: true })
 
   ipcMain.handle('turn:cancel', () => cancelTurn())
+
+  ipcMain.handle('tts:mute', (_e, muted: boolean) => setMuted(muted))
 
   ipcMain.handle('conversation:new', () => {
     // Cancel first, or the turn still running would repopulate the cleared window.

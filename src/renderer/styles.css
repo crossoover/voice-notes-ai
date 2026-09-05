@@ -242,3 +242,14 @@ body {
 .stop {
   padding: 2px 8px;
 }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ghost-on {
+  background: var(--line);
+  color: var(--text);
+}

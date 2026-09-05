@@ -37,6 +37,7 @@ export default function App(): React.JSX.Element {
   const [status, setStatus] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [banners, setBanners] = useState<string[]>([])
+  const [muted, setMuted] = useState(false)
   const toastTimer = useRef<number | undefined>(undefined)
 
   useEffect(() => {
@@ -156,6 +157,9 @@ export default function App(): React.JSX.Element {
             settleReply(event.turnId, event.text.trim() === '' ? '(no reply)' : event.text)
             setStatus(null)
             break
+          case 'speaking':
+            setStatus(event.on ? 'Speaking…' : null)
+            break
           case 'cancelled':
             // Keep the label, drop the half-sentence (spec §7.2).
             setEntries((prev) => [
@@ -182,24 +186,47 @@ export default function App(): React.JSX.Element {
     <div className="app">
       <header className="header">
         <span>Voice Notes</span>
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => {
-            window.api.newConversation().catch((err: unknown) => {
-              addEntry({
-                kind: 'error',
-                text: "Couldn't start a new conversation.",
-                detail: err instanceof Error ? err.message : String(err)
+        <div className="header-actions">
+          <button
+            type="button"
+            className={`ghost${muted ? ' ghost-on' : ''}`}
+            aria-pressed={muted}
+            title={muted ? 'Replies are muted' : 'Replies are spoken'}
+            onClick={() => {
+              const next = !muted
+              setMuted(next)
+              window.api.setMuted(next).catch((err: unknown) => {
+                // Main is the one that actually mutes; don't let the icon lie.
+                setMuted(!next)
+                addEntry({
+                  kind: 'error',
+                  text: "Couldn't change the mute setting.",
+                  detail: err instanceof Error ? err.message : String(err)
+                })
               })
-            })
-            replyId.current = null
-            setEntries([])
-            setStatus(null)
-          }}
-        >
-          ＋ New
-        </button>
+            }}
+          >
+            {muted ? '🔇' : '🔊'}
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              window.api.newConversation().catch((err: unknown) => {
+                addEntry({
+                  kind: 'error',
+                  text: "Couldn't start a new conversation.",
+                  detail: err instanceof Error ? err.message : String(err)
+                })
+              })
+              replyId.current = null
+              setEntries([])
+              setStatus(null)
+            }}
+          >
+            ＋ New
+          </button>
+        </div>
       </header>
 
       {[...(micError ? [micError] : []), ...banners].map((text) => (
