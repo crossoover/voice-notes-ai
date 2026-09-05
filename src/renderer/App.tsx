@@ -6,6 +6,11 @@ import type { RejectionReason } from '../shared/types'
 
 const WARN_AT_MS = 50_000
 
+// The states §5 requires, each distinct on screen. `thinking` carries its start so
+// the status line can count the seconds the agent is taking.
+type Status =
+  { kind: 'transcribing' } | { kind: 'thinking'; since: number } | { kind: 'speaking' } | null
+
 // Cancellation is not atomic and the UI has to say so: files the agent already
 // wrote stay written (spec §7.2).
 const INTERRUPTED = 'Interrupted — the assistant may have already changed files.'
@@ -34,7 +39,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 export default function App(): React.JSX.Element {
   const [entries, setEntries] = useState<Entry[]>([])
-  const [status, setStatus] = useState<string | null>(null)
+  const [status, setStatus] = useState<Status>(null)
+  const [thinkingFor, setThinkingFor] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
   const [banners, setBanners] = useState<string[]>([])
   const [muted, setMuted] = useState(false)
@@ -56,6 +62,14 @@ export default function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), [])
+
+  useEffect(() => {
+    if (status?.kind !== 'thinking') return
+    const tick = (): void => setThinkingFor(Math.floor((Date.now() - status.since) / 1000))
+    tick()
+    const id = setInterval(tick, 500)
+    return () => clearInterval(id)
+  }, [status])
 
   // The id of the reply being streamed into, so deltas append to it instead of
   // stacking up new entries. Cleared when a turn starts thinking.
@@ -135,14 +149,14 @@ export default function App(): React.JSX.Element {
       window.api.onTurnEvent((event) => {
         switch (event.type) {
           case 'transcribing':
-            setStatus('Transcribing…')
+            setStatus({ kind: 'transcribing' })
             break
           case 'transcript':
             addEntry({ kind: 'you', text: event.text })
             break
           case 'thinking':
             replyId.current = null
-            setStatus('Thinking…')
+            setStatus({ kind: 'thinking', since: Date.now() })
             break
           case 'tool':
             // Text after a tool call belongs in a new bubble below the tool line,
@@ -158,7 +172,7 @@ export default function App(): React.JSX.Element {
             setStatus(null)
             break
           case 'speaking':
-            setStatus(event.on ? 'Speaking…' : null)
+            setStatus(event.on ? { kind: 'speaking' } : null)
             break
           case 'cancelled':
             // Keep the label, drop the half-sentence (spec §7.2).
@@ -253,7 +267,17 @@ export default function App(): React.JSX.Element {
           onStop={stop}
         />
         <p className="status">
-          {status ?? (recording ? 'Listening…' : 'Hold Space or the button to talk.')}
+          <span className={status?.kind === 'speaking' ? 'speaking' : undefined}>
+            {status === null
+              ? recording
+                ? 'Listening…'
+                : 'Hold Space or the button to talk.'
+              : status.kind === 'transcribing'
+                ? 'Transcribing…'
+                : status.kind === 'thinking'
+                  ? `Thinking ${thinkingFor}s`
+                  : 'Speaking…'}
+          </span>
           {status !== null && (
             <button
               type="button"
